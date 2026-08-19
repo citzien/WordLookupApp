@@ -8,6 +8,11 @@
 最新版 APK（v1.10）在 GitHub Release 页面：
 https://github.com/citzien/WordLookupApp/releases
 
+## 开源协议
+
+本项目采用 **MIT 许可证**（见 LICENSE 文件）：任何人可以免费使用、修改、分发（包括商用），
+只需保留版权声明。欢迎拿去学习或二次开发。
+
 ## 功能
 
 - 手动输入单词查询：中文意思、英文释义 + 音标
