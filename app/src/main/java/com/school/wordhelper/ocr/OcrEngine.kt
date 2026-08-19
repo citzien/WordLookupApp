@@ -12,6 +12,7 @@ class OcrEngine(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("word_helper", Context.MODE_PRIVATE)
     private val baidu = BaiduOcrClient(context)
+    private val local = LocalOcrClient(context)
 
     private fun engine(): String = prefs.getString("ocr_engine", "baidu").orEmpty()
 
@@ -24,24 +25,26 @@ class OcrEngine(private val context: Context) {
         } else {
             bitmap
         }
-        return if (engine() == "tencent") {
-            val id = prefs.getString("tencent_secret_id", "").orEmpty().trim()
-            val key = prefs.getString("tencent_secret_key", "").orEmpty().trim()
-            if (id.isEmpty() || key.isEmpty()) {
-                throw IOException("还没有配置腾讯云 OCR 的密钥，请点右上角设置填写")
+        return when (engine()) {
+            "tencent" -> {
+                val id = prefs.getString("tencent_secret_id", "").orEmpty().trim()
+                val key = prefs.getString("tencent_secret_key", "").orEmpty().trim()
+                if (id.isEmpty() || key.isEmpty()) {
+                    throw IOException("还没有配置腾讯云 OCR 的密钥，请点右上角设置填写")
+                }
+                TencentOcrClient.recognize(ocrBitmap, id, key)
             }
-            TencentOcrClient.recognize(ocrBitmap, id, key)
-        } else {
-            baidu.recognize(ocrBitmap)
+            "local" -> local.recognize(ocrBitmap)
+            else -> baidu.recognize(ocrBitmap)
         }
     }
 
     /** 设置页「测试连接」：测试当前选中的引擎 */
     suspend fun testKeys(key1: String, key2: String): String {
-        return if (engine() == "tencent") {
-            TencentOcrClient.test(key1, key2)
-        } else {
-            baidu.testKeys(key1, key2)
+        return when (engine()) {
+            "tencent" -> TencentOcrClient.test(key1, key2)
+            "local" -> "本地引擎无需密钥，随时可用"
+            else -> baidu.testKeys(key1, key2)
         }
     }
 }

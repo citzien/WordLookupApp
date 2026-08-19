@@ -118,11 +118,11 @@ fun OcrScreen(
     var testResult by remember { mutableStateOf<String?>(null) }
     var keysConfigured by remember {
         mutableStateOf(
-            if ((prefs.getString("ocr_engine", "baidu") ?: "baidu") == "tencent") {
-                !prefs.getString("tencent_secret_id", "").orEmpty().isBlank() &&
+            when (prefs.getString("ocr_engine", "baidu") ?: "baidu") {
+                "tencent" -> !prefs.getString("tencent_secret_id", "").orEmpty().isBlank() &&
                     !prefs.getString("tencent_secret_key", "").orEmpty().isBlank()
-            } else {
-                !prefs.getString("baidu_api_key", "").orEmpty().isBlank() &&
+                "local" -> true
+                else -> !prefs.getString("baidu_api_key", "").orEmpty().isBlank() &&
                     !prefs.getString("baidu_secret_key", "").orEmpty().isBlank()
             }
         )
@@ -351,7 +351,7 @@ fun OcrScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     CircularProgressIndicator()
                                     Spacer(Modifier.height(8.dp))
-                                    Text("正在识别文字…（百度 OCR 云端识别）")
+                                    Text("正在识别文字…")
                                 }
                             }
                         }
@@ -370,7 +370,7 @@ fun OcrScreen(
                                     Spacer(Modifier.height(4.dp))
                                     Row {
                                         TextButton(onClick = { showSettings = true }) {
-                                            Text("去设置百度 OCR")
+                                            Text("去设置")
                                         }
                                         TextButton(onClick = { stage = "crop" }) {
                                             Text("重新裁剪")
@@ -498,6 +498,15 @@ fun OcrScreen(
                             },
                             label = { Text("腾讯云 OCR") }
                         )
+                        FilterChip(
+                            selected = engineChoice == "local",
+                            onClick = {
+                                engineChoice = "local"
+                                testResult = null
+                                keysConfigured = true
+                            },
+                            label = { Text("本地离线") }
+                        )
                     }
                     Spacer(Modifier.height(10.dp))
                     if (engineChoice == "tencent") {
@@ -526,6 +535,16 @@ fun OcrScreen(
                             label = { Text("SecretKey") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
+                        )
+                    } else if (engineChoice == "local") {
+                        Text(
+                            "本地 Tesseract OCR：无需密钥、完全离线。首次识别会自动复制约 4MB 模型，之后不再联网。精度略低于云端，适合无网环境。",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "注意：本地引擎仅支持 arm64/armv7 手机（模拟器不可用）。",
+                            style = MaterialTheme.typography.bodySmall
                         )
                     } else {
                         Text(

@@ -12,8 +12,13 @@ android {
         applicationId = "com.school.wordhelper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.10"
+        versionCode = 13
+        versionName = "1.12"
+
+        ndk {
+            // 只保留手机常用架构，减小 APK 体积（模拟器不支持本地 OCR，云端 OCR 不受影响）
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -48,5 +53,6 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.exifinterface)
     implementation(libs.kotlinx.coroutines.android)
+    implementation("cz.adaptech.tesseract4android:tesseract4android-openmp:4.8.0")
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
