@@ -91,4 +91,81 @@ object LineRemover {
         out.setPixels(pixels, 0, w, 0, 0, w, h)
         return out
     }
+
+    /**
+     * 去除「从文字中间穿过的横线」（练习册常见：每行中间一条线）。
+     * 先按行检测长横线（允许被字母打断的小空隙），
+     * 再逐像素判断：线上像素如果上下 3~6px 内有笔画（属于字母）就保留，否则擦白。
+     */
+    fun removeCrossingLines(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        val dark = BooleanArray(w * h)
+        for (i in 0 until w * h) {
+            val p = pixels[i]
+            val lum = (((p shr 16) and 0xFF) + ((p shr 8) and 0xFF) + (p and 0xFF)) / 3
+            dark[i] = lum < 150
+        }
+
+        val maxGap = maxOf(10, (w * 0.02).toInt())
+        val minLen = (w * 0.35).toInt()
+
+        // 1. 检测每行是否有长横线（允许被字母打断的小空隙）
+        val lineRows = ArrayList<Int>()
+        for (y in 0 until h) {
+            var start = -1
+            var last = -1
+            var cnt = 0
+            var x = 0
+            while (x < w) {
+                if (dark[y * w + x]) {
+                    if (start < 0) start = x
+                    last = x
+                    cnt++
+                } else {
+                    if (last >= 0 && x - last > maxGap) {
+                        if (last - start + 1 >= minLen && cnt >= minLen * 0.5) lineRows.add(y)
+                        start = -1
+                        last = -1
+                        cnt = 0
+                    }
+                }
+                x++
+            }
+            if (last >= 0 && last - start + 1 >= minLen && cnt >= minLen * 0.5) lineRows.add(y)
+        }
+
+        // 2. 逐像素擦线：保留属于字母的像素
+        var any = false
+        for (y in lineRows) {
+            for (x in 0 until w) {
+                if (!dark[y * w + x]) continue
+                var letter = false
+                outer@ for (dy in intArrayOf(-6, -5, -4, -3, 3, 4, 5, 6)) {
+                    val yy = y + dy
+                    if (yy < 0 || yy >= h) continue
+                    for (dx in -2..2) {
+                        val xx = x + dx
+                        if (xx < 0 || xx >= w) continue
+                        if (dark[yy * w + xx]) {
+                            letter = true
+                            break@outer
+                        }
+                    }
+                }
+                if (!letter) {
+                    pixels[y * w + x] = -1 // 白色
+                    any = true
+                }
+            }
+        }
+        if (!any) return src
+
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        out.setPixels(pixels, 0, w, 0, 0, w, h)
+        return out
+    }
 }

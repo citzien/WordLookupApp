@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.school.wordhelper.data.DictionaryRepository
+import com.school.wordhelper.data.TranslateConfig
 import com.school.wordhelper.data.WordResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,12 @@ class WordHelperViewModel(app: Application) : AndroidViewModel(app) {
     )
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
+    init {
+        // 把设置页保存的百度翻译密钥加载到内存
+        TranslateConfig.appId = prefs.getString("baidu_trans_appid", "").orEmpty()
+        TranslateConfig.key = prefs.getString("baidu_trans_key", "").orEmpty()
+    }
+
     fun search(raw: String) {
         val word = raw.trim().lowercase()
         if (word.isEmpty()) return
@@ -41,8 +48,10 @@ class WordHelperViewModel(app: Application) : AndroidViewModel(app) {
                 val result = repository.lookup(word)
                 _uiState.update { it.copy(loading = false, result = result) }
                 saveHistory(word)
-                // 第二段：后台补充例句和中文意思
-                val enriched = repository.enrichExamples(word, result)
+                // 第二段：后台补充例句和中文意思（逐个完成即刷新，边查边显示）
+                val enriched = repository.enrichExamples(word, result) { updated ->
+                    _uiState.update { it.copy(result = updated) }
+                }
                 _uiState.update { it.copy(result = enriched) }
             } catch (e: Exception) {
                 _uiState.update {

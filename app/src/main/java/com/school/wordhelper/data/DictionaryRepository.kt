@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.withPermit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 data class WordResult(
@@ -81,24 +82,49 @@ class DictionaryRepository {
         return base.copy(examplesLoading = true)
     }
 
-    /** 第二阶段：补充每个同义词/近义词的例句和中文意思 */
-    suspend fun enrichExamples(word: String, base: WordResult): WordResult {
+    /**
+     * 第二阶段：补充每个同义词/近义词的例句和中文意思。
+     * 例句逐个完成后立即通过 onProgress 通知界面，实现「边查边显示」。
+     */
+    suspend fun enrichExamples(
+        word: String,
+        base: WordResult,
+        onProgress: (WordResult) -> Unit = {}
+    ): WordResult {
         if (!base.examplesLoading) return base
         val words = (base.synonyms + base.nearSynonyms).map { it.word }.distinct()
-        val details = fetchDetails(words)
-        val enriched = base.copy(
-            synonyms = base.synonyms.map { w ->
-                val d = details[w.word]
-                WordWithExample(w.word, d?.en, d?.zh, d?.meaningZh)
-            },
-            nearSynonyms = base.nearSynonyms.map { w ->
-                val d = details[w.word]
-                WordWithExample(w.word, d?.en, d?.zh, d?.meaningZh)
-            },
-            examplesLoading = false
-        )
-        cache[word] = enriched
-        return enriched
+        val semaphore = Semaphore(10)
+        return coroutineScope {
+            val deferred = words.map { w ->
+                async { semaphore.withPermit { fetchWordDetail(w) } }
+            }
+            var current = base
+            for (d in deferred) {
+                val detail = d.await()
+                if (detail != null) {
+                    current = current.copy(
+                        synonyms = current.synonyms.map {
+                            if (it.word == detail.word) {
+                                WordWithExample(detail.word, detail.en, detail.zh, detail.meaningZh)
+                            } else {
+                                it
+                            }
+                        },
+                        nearSynonyms = current.nearSynonyms.map {
+                            if (it.word == detail.word) {
+                                WordWithExample(detail.word, detail.en, detail.zh, detail.meaningZh)
+                            } else {
+                                it
+                            }
+                        }
+                    )
+                    onProgress(current)
+                }
+            }
+            val finalResult = current.copy(examplesLoading = false)
+            cache[word] = finalResult
+            finalResult
+        }
     }
 
     private suspend fun queryBase(word: String): WordResult = coroutineScope {
@@ -155,9 +181,34 @@ class DictionaryRepository {
             youdaoMeaning(text)
         } catch (e: Exception) {
             null
-        } ?: translateZh(text)
+        } ?: translateWithBaidu(text) ?: translateZh(text)
         if (!result.isNullOrBlank()) translationCache[text] = result
         return result
+    }
+
+    /** 百度翻译开放平台（设置页配置 APP ID/密钥后生效），失败返回 null */
+    private suspend fun translateWithBaidu(text: String): String? {
+        if (TranslateConfig.appId.isBlank() || TranslateConfig.key.isBlank()) return null
+        val salt = (System.currentTimeMillis() % 100000000L).toString()
+        val signInput = TranslateConfig.appId + text + salt + TranslateConfig.key
+        val sign = md5(signInput)
+        return try {
+            val url = "https://fanyi-api.baidu.com/api/trans/vip/translate"
+            val body = "q=" + URLEncoder.encode(text, "UTF-8") +
+                "&from=en&to=zh&appid=" + TranslateConfig.appId +
+                "&salt=" + salt + "&sign=" + sign
+            val json = httpPostForm(url, body)
+            val arr = JSONObject(json).optJSONArray("trans_result")
+            val dst = arr?.optJSONObject(0)?.optString("dst").orEmpty()
+            dst.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun md5(input: String): String {
+        val digest = MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     /** 金山词霸词典接口（国内直连，约 0.1 秒） */
@@ -249,8 +300,8 @@ class DictionaryRepository {
         val example = fetchExample(word)
         var zh = example?.zh
         if (example != null && example.en != null && !example.zhSimplified) {
-            // 例句翻译不是简体时，用翻译接口强制转成简体
-            val t = translateZh(example.en)
+            // 例句翻译不是简体（或缺中文）时：百度翻译 → MyMemory 兜底，强制转简体
+            val t = translateWithBaidu(example.en) ?: translateZh(example.en)
             if (!t.isNullOrBlank()) zh = t
         }
         val meaning = fetchChineseMeaning(word)

@@ -16,7 +16,14 @@ class OcrEngine(private val context: Context) {
     private fun engine(): String = prefs.getString("ocr_engine", "baidu").orEmpty()
 
     suspend fun recognize(bitmap: Bitmap, removeLines: Boolean = true): List<OcrWord> {
-        val ocrBitmap = if (removeLines) LineRemover.removeGridLines(bitmap) else bitmap
+        val ocrBitmap = if (removeLines) {
+            // 先去格子/表格框线，再去从文字中间穿过的横线
+            var bmp = LineRemover.removeGridLines(bitmap)
+            bmp = LineRemover.removeCrossingLines(bmp)
+            bmp
+        } else {
+            bitmap
+        }
         return if (engine() == "tencent") {
             val id = prefs.getString("tencent_secret_id", "").orEmpty().trim()
             val key = prefs.getString("tencent_secret_key", "").orEmpty().trim()

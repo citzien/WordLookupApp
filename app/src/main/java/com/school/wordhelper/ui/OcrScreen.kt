@@ -112,6 +112,8 @@ fun OcrScreen(
     var secretInput by remember { mutableStateOf(prefs.getString("baidu_secret_key", "") ?: "") }
     var tencentIdInput by remember { mutableStateOf(prefs.getString("tencent_secret_id", "") ?: "") }
     var tencentKeyInput by remember { mutableStateOf(prefs.getString("tencent_secret_key", "") ?: "") }
+    var transAppIdInput by remember { mutableStateOf(prefs.getString("baidu_trans_appid", "") ?: "") }
+    var transKeyInput by remember { mutableStateOf(prefs.getString("baidu_trans_key", "") ?: "") }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var keysConfigured by remember {
@@ -280,7 +282,7 @@ fun OcrScreen(
                                 removeLines = !removeLines
                                 prefs.edit().putBoolean("ocr_remove_lines", removeLines).apply()
                             },
-                            label = { Text("去除格子线") }
+                            label = { Text("去除线条（格子/横线）") }
                         )
                         Spacer(Modifier.width(8.dp))
                         TextButton(
@@ -440,10 +442,16 @@ fun OcrScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                if (keysConfigured) "百度 OCR 已配置，可以拍照识别 ✓"
-                                else "未配置百度 OCR，请点右上角「设置」填写 API Key",
+                                if (keysConfigured) "OCR 已配置，可以拍照识别 ✓"
+                                else "未配置 OCR，请点右上角「设置」填写密钥",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "⚠️ 提示：OCR 识别目前还不稳定（对带横线/格子的图片效果一般），正在优化中。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
                             )
                         }
                     }
@@ -547,6 +555,27 @@ fun OcrScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "例句翻译加速（可选）：开通百度翻译开放平台（免费额度）后填 APP ID 和密钥，例句翻译会更快更稳。申请：https://fanyi-api.baidu.com",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = transAppIdInput,
+                        onValueChange = { transAppIdInput = it },
+                        label = { Text("百度翻译 APP ID") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = transKeyInput,
+                        onValueChange = { transKeyInput = it },
+                        label = { Text("百度翻译密钥") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Spacer(Modifier.height(4.dp))
                     TextButton(
                         onClick = {
@@ -584,6 +613,8 @@ fun OcrScreen(
                 TextButton(onClick = {
                     val editor = prefs.edit()
                         .putString("ocr_engine", engineChoice)
+                        .putString("baidu_trans_appid", transAppIdInput.trim())
+                        .putString("baidu_trans_key", transKeyInput.trim())
                     if (engineChoice == "tencent") {
                         editor
                             .putString("tencent_secret_id", tencentIdInput.trim())
@@ -594,6 +625,8 @@ fun OcrScreen(
                             .putString("baidu_secret_key", secretInput.trim())
                     }
                     editor.apply()
+                    com.school.wordhelper.data.TranslateConfig.appId = transAppIdInput.trim()
+                    com.school.wordhelper.data.TranslateConfig.key = transKeyInput.trim()
                     keysConfigured = true
                     showSettings = false
                     Toast.makeText(context, "OCR 设置已保存", Toast.LENGTH_SHORT).show()
